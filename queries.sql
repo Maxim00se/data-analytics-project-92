@@ -63,3 +63,50 @@ left join products p on p.product_id = s.product_id
 group by seller, day_of_week, to_char(s.sale_date, 'D')
 order by (to_char(s.sale_date, 'D')::INTEGER + 5) % 7, seller asc 
 order by average_income
+
+
+/*
+ *Данный запрос считает кол-во покупателей каждой возрастной группы. 
+ *С помощью оператора CASE мы создаем условие и название категории, затем идет подсчет и
+ *распределение по группам.
+ */
+SELECT
+    CASE
+        WHEN age BETWEEN 16 AND 25 THEN '16-25'
+        WHEN age BETWEEN 26 AND 40 THEN '26-40'
+        ELSE '40+'
+    END AS age_category,
+    COUNT(*) AS age_count
+FROM customers c 
+GROUP BY age_category
+ORDER BY age_category
+
+
+/*
+ * Данный запрос считает кол-во уникальных покупателей и их выручку за определенный месяц.
+ */
+select
+	to_char(s.sale_date, 'YYYY-MM') as date,
+	count(distinct s.customer_id) as total_customers,
+	floor(SUM(s.quantity * p.price)) as income
+from sales s
+left join products p on s.product_id = p.product_id
+group by date
+order by date
+
+
+/*
+ * Данный запрос выводит покупателей, чья первая покупка пришлась на акционный товар с ценой = 0.
+ * Также была выведена дата покупки и имя продавца.
+ */
+SELECT 
+    CONCAT(c.first_name, ' ', c.last_name) AS customer, 
+    MIN(s.sale_date) AS sale_date,
+    CONCAT(e.first_name, ' ', e.last_name) AS seller
+FROM sales s
+LEFT JOIN products p ON s.product_id = p.product_id
+LEFT JOIN customers c ON s.customer_id = c.customer_id
+LEFT JOIN employees e ON s.sales_person_id = e.employee_id
+WHERE p.price = 0
+GROUP BY s.customer_id, c.first_name, c.last_name, e.first_name, e.last_name
+ORDER BY s.customer_id
