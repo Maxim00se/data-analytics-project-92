@@ -14,7 +14,7 @@ from customers;
  */
 select
 	concat(e.first_name, ' ', e.last_name) as seller,
-	sum(s.quantity) as operations,
+	count(s.sales_person_id) as operations,
 	floor(sum(s.quantity * p.price)) as income
 from sales s
 left join employees e on s.sales_person_id = e.employee_id
@@ -33,18 +33,19 @@ limit 10
  */
 with avg_income_all as (
 	select
-		floor((sum(s.quantity * p.price)) / sum(s.quantity)) as avg_income_all
+		floor(avg(s.quantity * p.price)) as avg_income_all
 	from sales s
 	left join products p on s.product_id = p.product_id
 )
 select
 	concat(e.first_name, ' ', e.last_name) as seller,
-	floor(sum(s.quantity * p.price) / sum(s.quantity)) as average_income
+	floor(avg(s.quantity * p.price)) as average_income
 from sales s
 left join employees e on s.sales_person_id = e.employee_id
 left join products p on s.product_id = p.product_id
 group by seller
-having floor(sum(s.quantity * p.price) / sum(s.quantity)) < (select avg_income_all from avg_income_all)
+having floor(avg(s.quantity * p.price)) < (select avg_income_all from avg_income_all)
+order by average_income
 
 
 /*
@@ -55,14 +56,13 @@ having floor(sum(s.quantity * p.price) / sum(s.quantity)) < (select avg_income_a
  */
 select
 	concat(e.first_name, ' ', e.last_name) as seller,
-	trim(to_char(s.sale_date, 'Day')) AS day_of_week,
+	trim(to_char(s.sale_date, 'day')) AS day_of_week,
 	floor(sum(s.quantity * p.price)) as income
 from sales s 
 left join employees e on e.employee_id = s.sales_person_id
 left join products p on p.product_id = s.product_id
 group by seller, day_of_week, to_char(s.sale_date, 'D')
 order by (to_char(s.sale_date, 'D')::INTEGER + 5) % 7, seller asc 
-order by average_income
 
 
 /*
@@ -86,27 +86,44 @@ ORDER BY age_category
  * Данный запрос считает кол-во уникальных покупателей и их выручку за определенный месяц.
  */
 select
-	to_char(s.sale_date, 'YYYY-MM') as date,
+	to_char(s.sale_date, 'YYYY-MM') as selling_month,
 	count(distinct s.customer_id) as total_customers,
 	floor(SUM(s.quantity * p.price)) as income
 from sales s
 left join products p on s.product_id = p.product_id
-group by date
-order by date
+group by selling_month
+order by selling_month
 
 
 /*
  * Данный запрос выводит покупателей, чья первая покупка пришлась на акционный товар с ценой = 0.
  * Также была выведена дата покупки и имя продавца.
  */
+WITH first_sale AS (
+    SELECT 
+        s.customer_id,
+        MIN(s.sale_date) AS sale_date
+    FROM sales s
+    LEFT JOIN products p ON s.product_id = p.product_id
+    WHERE p.price = 0
+    GROUP BY s.customer_id
+),
+unique_sale AS (
+    SELECT 
+        fs.customer_id,
+        fs.sale_date,
+        MIN(s.sales_person_id) AS sales_person_id
+    FROM first_sale fs
+    JOIN sales s 
+        ON fs.customer_id = s.customer_id 
+        AND fs.sale_date = s.sale_date
+    GROUP BY fs.customer_id, fs.sale_date
+)
 SELECT 
-    CONCAT(c.first_name, ' ', c.last_name) AS customer, 
-    MIN(s.sale_date) AS sale_date,
+    CONCAT(c.first_name, ' ', c.last_name) AS customer,
+    us.sale_date,
     CONCAT(e.first_name, ' ', e.last_name) AS seller
-FROM sales s
-LEFT JOIN products p ON s.product_id = p.product_id
-LEFT JOIN customers c ON s.customer_id = c.customer_id
-LEFT JOIN employees e ON s.sales_person_id = e.employee_id
-WHERE p.price = 0
-GROUP BY s.customer_id, c.first_name, c.last_name, e.first_name, e.last_name
-ORDER BY s.customer_id
+FROM unique_sale us
+LEFT JOIN customers c ON us.customer_id = c.customer_id
+LEFT JOIN employees e ON us.sales_person_id = e.employee_id
+ORDER BY c.customer_id
